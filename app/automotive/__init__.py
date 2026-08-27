@@ -1,0 +1,1 @@
+"""Automotive domain extension placeholder."""
