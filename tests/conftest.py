@@ -23,6 +23,10 @@ from app.cpl.models.runner_artifact import RunnerArtifact
 from app.cpl.models.case_event import CaseEvent
 from app.cpl.models.asset_identity_resolution import AssetIdentityResolution
 from app.cpl.models.external_reference import ExternalReference
+from app.cpl.models.identity_operation import IdentityOperation
+from app.cpl.models.merge_proposal import MergeProposal
+from app.cpl.models.contact_point_verification import ContactPointVerification
+from app.cpl.models.contact_creation_request import ContactCreationRequest
 from app.automotive.models.vehicle_detail import VehicleDetail
 
 from app.db.engine import check_db_connection
@@ -64,3 +68,29 @@ def db_session(db_engine):
     session.close()
     transaction.rollback()
     connection.close()
+
+
+@pytest.fixture
+def full_authority():
+    """AuthorityContext holding every B3 authority class — used by tests
+    that are not specifically exercising authority-denial behavior."""
+    from app.cpl.identity.authority import Authority, AuthorityContext
+
+    return AuthorityContext(
+        granted=frozenset(
+            {
+                Authority.READ_IDENTITY,
+                Authority.RESOLVE_IDENTITY,
+                Authority.CREATE_CONTACT,
+                Authority.MANAGE_CONTACT_POINT,
+                Authority.VERIFY_CONTACT_POINT,
+                Authority.ATTACH_ACCOUNT,
+                Authority.MANAGE_ACCOUNT,
+                Authority.ASSESS_DUPLICATE,
+                Authority.PROPOSE_MERGE,
+                Authority.AUTHORIZE_MERGE,
+                Authority.EXECUTE_MERGE,
+            }
+        ),
+        actor_reference="test-suite",
+    )
