@@ -41,10 +41,19 @@ def establish_relationship(
     session: Session, *, contact_id: UUID, asset_id: UUID, relationship_type: str,
     evidence: Optional[dict], authority: AuthorityContext, idempotency_key: str,
     valid_from: Optional[datetime] = None, source: Optional[str] = None,
+    cardinality_policy: Optional[dict[str, dict]] = None,
 ) -> OperationResult:
     """REQ-B4-104..119, REQ-B4-129. Relationship evidence != authority
     (REQ-B4-111): admission requires applicable evidence/authority
-    context, not merely a self-asserted claim."""
+    context, not merely a self-asserted claim.
+
+    REQ-B4-155..161: cardinality/compatibility admission is integrated
+    here rather than left to an optional caller-invoked side-check, so
+    correctness does not depend on callers remembering to call
+    `assess_relationship_compatibility` separately. `cardinality_policy`
+    defaults to None/{} (unrestricted coexistence, REQ-B4-158) — CPL
+    invents no universal cardinality rule; only caller-supplied,
+    type/domain-governed policy can make establishment CONFLICTING."""
     authority.require(AssetAuthority.MANAGE_RELATIONSHIP)
 
     replay = _idempotent_replay(session, idempotency_key)
@@ -55,6 +64,14 @@ def establish_relationship(
     asset = session.get(Asset, asset_id)
     if contact is None or asset is None:
         return OperationResult(outcome=OperationOutcome.NOT_FOUND)
+
+    if cardinality_policy:
+        compatibility = assess_relationship_compatibility(
+            session, asset_id=asset_id, relationship_type=relationship_type,
+            candidate_contact_id=contact_id, policy=cardinality_policy,
+        )
+        if compatibility.outcome != OperationOutcome.SUCCESS:
+            return compatibility
 
     relationship = ContactAssetRelationship(
         contact_id=contact_id, asset_id=asset_id, relationship_type=relationship_type,

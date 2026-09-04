@@ -20,6 +20,7 @@ from app.cpl.models.asset_merge_request import AssetMergeRequest
 from app.cpl.models.canonical_relationship_decision import CanonicalRelationshipDecision
 from app.cpl.models.relationship_mutation_request import RelationshipMutationRequest
 from app.cpl.models.domain_projection import DomainProjection
+from app.cpl.models.asset_creation_request import AssetCreationRequest
 
 __all__ = [
     "Contact", "ContactPoint", "Account", "Asset", "AssetIdentifier",
@@ -28,4 +29,5 @@ __all__ = [
     "IdentityOperation", "MergeProposal", "ContactPointVerification", "ContactCreationRequest",
     "CanonicalAssetIdentityDecision", "AssetMergeRequest",
     "CanonicalRelationshipDecision", "RelationshipMutationRequest", "DomainProjection",
+    "AssetCreationRequest",
 ]

@@ -254,3 +254,52 @@ class TestB4Positive:
         # REQ-B4-259: historical target preserved, current navigation follows successor.
         assert view["historical_target"] == newer.asset_id
         assert view["current_target"] == older.asset_id
+
+    def test_p11_simultaneous_contact_and_asset_endpoint_evolution(self, db_session, full_b4_authority):
+        # REQ-B4-232: both sides of a relationship's endpoints evolve
+        # (Contact merges via B3-style merged_into_id, Asset merges via
+        # B4) — current navigation must follow both successor chains
+        # while the relationship's historical endpoints stay untouched.
+        old_contact = Contact(contact_type="PERSON", display_name="Old Contact")
+        new_contact = Contact(contact_type="PERSON", display_name="New Contact")
+        db_session.add_all([old_contact, new_contact])
+        db_session.flush()
+        older_asset = _asset(db_session)
+        db_session.flush()
+        newer_asset = _asset(db_session)
+        db_session.commit()
+
+        est = establish_relationship(
+            db_session, contact_id=old_contact.contact_id, asset_id=newer_asset.asset_id,
+            relationship_type="OWNER", evidence={"source": "registration"},
+            authority=full_b4_authority, idempotency_key=str(uuid.uuid4()),
+        )
+        db_session.commit()
+
+        # Evolve the Contact side (mirrors B3's merged_into_id pattern directly).
+        new_contact_id = new_contact.contact_id  # capture before mutating to avoid
+        # a mid-assignment autoflush seeing MERGED status without merged_into_id set.
+        old_contact.contact_status = "MERGED"
+        old_contact.merged_into_id = new_contact_id
+        db_session.commit()
+
+        # Evolve the Asset side via governed B4 merge.
+        res = _resolution(db_session, newer_asset.asset_id)
+        db_session.commit()
+        admit_and_execute_asset_merge(
+            db_session, asset_a_id=older_asset.asset_id, asset_b_id=newer_asset.asset_id,
+            resolution_id=res.resolution_id, dependency_disposition=_full_dispositions(),
+            authority=full_b4_authority, idempotency_key=str(uuid.uuid4()),
+        )
+        db_session.commit()
+
+        rel = db_session.get(ContactAssetRelationship, est.object_id)
+        view = relationship_current_view(db_session, rel)
+        # Historical endpoints (what the relationship was actually
+        # established against) remain exactly as recorded.
+        assert view["historical_contact_id"] == old_contact.contact_id
+        assert view["historical_asset_id"] == newer_asset.asset_id
+        # Current navigation follows both successor chains independently.
+        assert view["current_contact_id"] == new_contact.contact_id
+        assert view["current_asset_id"] == older_asset.asset_id
+

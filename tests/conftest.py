@@ -32,6 +32,7 @@ from app.cpl.models.asset_merge_request import AssetMergeRequest
 from app.cpl.models.canonical_relationship_decision import CanonicalRelationshipDecision
 from app.cpl.models.relationship_mutation_request import RelationshipMutationRequest
 from app.cpl.models.domain_projection import DomainProjection
+from app.cpl.models.asset_creation_request import AssetCreationRequest
 from app.automotive.models.vehicle_detail import VehicleDetail
 
 from app.db.engine import check_db_connection
