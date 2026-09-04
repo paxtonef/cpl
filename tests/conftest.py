@@ -27,6 +27,11 @@ from app.cpl.models.identity_operation import IdentityOperation
 from app.cpl.models.merge_proposal import MergeProposal
 from app.cpl.models.contact_point_verification import ContactPointVerification
 from app.cpl.models.contact_creation_request import ContactCreationRequest
+from app.cpl.models.canonical_asset_identity_decision import CanonicalAssetIdentityDecision
+from app.cpl.models.asset_merge_request import AssetMergeRequest
+from app.cpl.models.canonical_relationship_decision import CanonicalRelationshipDecision
+from app.cpl.models.relationship_mutation_request import RelationshipMutationRequest
+from app.cpl.models.domain_projection import DomainProjection
 from app.automotive.models.vehicle_detail import VehicleDetail
 
 from app.db.engine import check_db_connection
@@ -90,6 +95,29 @@ def full_authority():
                 Authority.PROPOSE_MERGE,
                 Authority.AUTHORIZE_MERGE,
                 Authority.EXECUTE_MERGE,
+            }
+        ),
+        actor_reference="test-suite",
+    )
+
+
+@pytest.fixture
+def full_b4_authority():
+    """AuthorityContext holding every B4 Asset authority class."""
+    from app.cpl.assets.authority import AssetAuthority
+    from app.cpl.identity.authority import AuthorityContext
+
+    return AuthorityContext(
+        granted=frozenset(
+            {
+                AssetAuthority.READ_ASSET,
+                AssetAuthority.CREATE_ASSET,
+                AssetAuthority.MANAGE_ASSET_IDENTIFIER,
+                AssetAuthority.CONSUME_IDENTITY_RESOLUTION,
+                AssetAuthority.ADMIT_ASSET_MERGE,
+                AssetAuthority.EXECUTE_ASSET_MERGE,
+                AssetAuthority.CORRECT_ASSET_IDENTITY,
+                AssetAuthority.MANAGE_RELATIONSHIP,
             }
         ),
         actor_reference="test-suite",
