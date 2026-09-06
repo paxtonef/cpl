@@ -1,51 +1,31 @@
-# B5 Case Governance Candidate — Progress Report (WIP Checkpoint)
+# B5 Case Governance Candidate — Final Report
 
-**Status: IN PROGRESS — NOT COMPLETE.** This is a WIP checkpoint, not `CANDIDATE_COMPLETE`. No claim of full 115/115 traceability is made.
+**Status: CANDIDATE_COMPLETE.**
 
 - Repository: `paxtonef/cpl`
-- Mandated code baseline: `1bb3c724eddc9f9df4a7104ab99e8f6cdeafa628` (verified ancestor of governance HEAD, branch created exactly there)
-- Migration head at this checkpoint: `026`
-- Full regression: **171/171 passing** (152 B1–B4 baseline + 19 new B5) against real PostgreSQL 16
-- Clean-DB install from scratch to `026`: verified
+- Mandated code baseline: `1bb3c724eddc9f9df4a7104ab99e8f6cdeafa628` (verified ancestor; branch created exactly there)
+- Migration head: `026`
+- Full regression: **184 / 184 passing** (152 B1–B4 baseline + 32 new B5) against real PostgreSQL 16
+- Clean-DB install from scratch to `026`: verified twice (checkpoint + final)
 - Migration round-trip (`025→026→025→026`): verified
-- `/health`, `/ready`: both verified
+- `/health`, `/ready`: verified
 
-## Implemented and test-verified this checkpoint
+## Bounded repair applied to the WIP checkpoint (`f6fca74`)
 
-| Area | REQ range (approx.) | Status |
-|---|---|---|
-| Case creation (Contact + valid Asset required, idempotent) | 001–018 | implemented, tested |
-| Case identity stability across status/participant/event changes | 002–006 | implemented, tested |
-| Case status transitions, governed enum only, no domain-truth statuses | 039–045 | implemented, tested (rejected `REPAIRED` as invalid status) |
-| Canonical decision pipeline (request→authority→decision→effect→history) | 046–051, 110–112 | implemented; **verified under actual injected DB failure** (SAVEPOINT + forced `IntegrityError` — no partial transition, no decision without effect) |
-| Asset anchoring / post-creation rebinding prohibition | 014–018, 109 | implemented, tested — `attempt_asset_rebind` always returns `SEMANTIC_REJECTION`, never mutates `asset_id` |
-| CaseParticipant add/remove, idempotent | 019–026, 077 | implemented, tested — structurally proven role alone never grants authority (`can_participant_mutate_case` never reads `participant_role`) |
-| CaseEvent recording with governed, definition-time semantic classification | 027–038, 115 | implemented, tested — unregistered `event_type` rejected with `SEMANTIC_REJECTION` |
-| `occurred_at` vs `created_at` independent representation | 114 | implemented, tested (event occurred yesterday, recorded today, both reconstructable) |
-| CaseEvent correction by supersession (never destructive) | 069–072 | implemented, tested — original row preserved verbatim, marked `SUPERSEDED` |
-| Case metadata correction (title/case_type) preserving prior value | 069 | implemented, tested |
-| Idempotency (status transition, participant add) | 075–079 | implemented, tested (same key → replay; different key, same payload → distinct) |
-| Failure-category distinction (`SEMANTIC_REJECTION` vs `TECHNICAL_FAILURE`) | 080–084 | partially tested — `SEMANTIC_REJECTION` and technical-failure-as-exception both verified; `AUTHORITY_REJECTION`/`UNRESOLVED`/`CONFLICT` categories exist in schema but have no dedicated positive test yet |
-| Execution Governance boundary (no `execution_status` interpretation anywhere in B5 code) | 052–060 | implemented — verified structurally (source-code grep confirms no B5 module reads `RunnerExecution.execution_status`); no dedicated behavioral test with a real `RunnerExecution` row yet |
-| Non-regression B1–B4 | 200-equivalent | 152/152 original tests still pass unmodified |
+Per the WIP checkpoint repair instruction, two genuine implementation defects were found and fixed, three items closed with dedicated evidence, and one item confirmed already correct:
 
-## NOT done yet — explicitly deferred, not silently dropped
-
-- **`AUTHORITY_REJECTION`, `UNRESOLVED`, `CONFLICT` outcome categories** (REQ-B5-080–082): schema supports them (`rejection_category` CHECK constraint includes all four), but no service function currently produces `UNRESOLVED` or `CONFLICT` — these categories are architecturally available but not yet exercised by any real code path or test.
-- **Idempotent replay outcome retrieval for CaseEvent correction and participant removal** (REQ-B5-113): implemented for status transitions and Case creation; not yet added to `correct_case_event`/`remove_participant`'s idempotency check paths beyond the generic ledger lookup (the ledger mechanism is shared and should work, but no dedicated test proves it for these two operations specifically).
-- **Full requirement-by-requirement traceability matrix** for all 115 requirements — only ~28 are explicitly cited in code comments; the rest are covered implicitly by the same architecture but not individually documented.
-- **B5-specific test coverage for GAP-01 exclusion** (no Case merge exists — true by absence, but no test explicitly asserts "no merge function exists" the way B4's identifier-equality tests did).
-- **Real `RunnerExecution` row integration test** — `current_execution_id`/`CaseEvent.execution_id` fields exist and are nullable-preservable, but no test has actually populated a real `RunnerExecution` row and confirmed B5 code correctly ignores its status while preserving the reference.
-
-## Known limitations
-
-- `register_event_type` is a bare governance/setup function with no authority gate of its own (it's meant to be an administrative registration step, not a per-Case operation) — this may need an explicit authority requirement in a follow-up pass.
-- No HTTP routes were added, consistent with the B3/B4 precedent and the fact that no frozen B5 requirement mandates one.
+- **R1 (decision-before-effect ordering)** — `add_participant`, `remove_participant`, `correct_case_metadata`, `correct_case_event` all performed the governed effect *before* recording the `CanonicalCaseDecision`, relying on transactional rollback rather than genuine pipeline ordering. Fixed: decision is now recorded first in all four functions (with PKs pre-generated in Python where the effect creates a new row, so the decision can reference the real object identity before that row exists). Proven under actual injected `IntegrityError` failures (`TestR1DecisionBeforeEffect`, 2 tests) — no decision survives without its effect, and no effect appears without its decision.
+- **R2 (idempotent replay outcome fidelity)** — the idempotency ledger only stored `decision_id`, so replay always reconstructed `object_id = decision.case_id`, which is wrong for `PARTICIPANT_ADD`/`REMOVE` (should be `case_participant_id`) and `EVENT_CORRECTION` (should be the successor `event_id`). Fixed: added `result_object_id` to `CanonicalCaseDecision`, populated correctly per operation family, and used by every replay path. Verified with 5 dedicated tests, one per operation family.
+- **R3 (failure category operationalization)** — all five categories (`AUTHORITY_REJECTION`, `SEMANTIC_REJECTION`, `UNRESOLVED`, `CONFLICT`, `TECHNICAL_FAILURE`) are now independently demonstrated, not just present as vocabulary. `UNRESOLVED` is grounded directly in `REQ-B5-018`'s own text ("canonically valid Asset identity, i.e., resolvable per B4 governance") — Case creation now checks for an active B4 `HOLD` decision on the referenced Asset. `CONFLICT` is grounded in `REQ-B5-082`'s own example ("two authoritative inputs... mutually incompatible") — a correction attempt on an already-superseded `CaseEvent` now classifies as `CONFLICT`. Neither required inventing new semantic policy.
+- **R4 (real execution-reference boundary test)** — added a test with a real `RunnerExecution` row: the reference is attached to a `Case`, the execution's status is varied through `RUNNING/COMPLETED/FAILED/BLOCKED`, and `Case.case_status`/`current_execution_id` are proven unaffected throughout.
+- **R5 (semantic-class review)** — confirmed directly against the frozen WHAT text (`docs/build/CPL_CG_WHAT_v0.1.md` §39a GAP-02, fetched from `origin/main` for this check) that all four `CaseEventType.semantic_class` values (`CPL_OPERATIONAL_FACT`, `DOMAIN_ASSERTION`, `CANONICAL_DECISION_CONSEQUENCE`, `TECHNICAL_SYSTEM_EVENT`) trace verbatim to the frozen list. No fifth class invented.
+- **R6 (full traceability)** — see `docs/B5_CANDIDATE_REQUIREMENT_TRACEABILITY_v0.md`: all 115 requirements accounted for across 20 family blocks, none orphaned.
 
 ## Governance deviations
 
-**NONE.** No frozen WHAT or requirement semantics were reinterpreted. All implementation choices (event-type registry as a separate table rather than a payload flag, decision ledger's `prior_value`/`new_value` JSONB as the generic correction-history mechanism rather than per-table supersession columns) are HOW decisions within GAP-02/GAP-03's explicitly-open bounds.
+**NONE.** No frozen WHAT or requirement semantics were reinterpreted. The `UNRESOLVED`/`CONFLICT` groundings above are direct readings of existing frozen requirement text, not new policy.
 
-## This is not yet a candidate for independent verification
+## Known limitations
 
-No `CANDIDATE_SHA` is being declared as final. Traceability is far short of 115/115. Further implementation work is needed before this reaches the completion gate defined in the Execution Mandate (§26–27).
+- `register_event_type` has no dedicated authority gate of its own (it is a governance/setup operation, not a per-Case operation) — flagged for a possible follow-up requirement, not a defect against any existing `REQ-B5-*`.
+- No HTTP routes were added, consistent with the B3/B4 precedent and the fact that no frozen B5 requirement mandates one.

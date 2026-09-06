@@ -36,6 +36,7 @@ class CanonicalCaseDecision(Base):
     authority_context = Column(JSONB, nullable=True)
     prior_value = Column(JSONB, nullable=True)
     new_value = Column(JSONB, nullable=True)
+    result_object_id = Column(UUID(as_uuid=True), nullable=True)
     result = Column(Text, nullable=False)
     rejection_category = Column(Text, nullable=True)
     decided_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))

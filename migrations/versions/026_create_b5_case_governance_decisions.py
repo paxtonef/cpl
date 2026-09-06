@@ -4,6 +4,13 @@ idempotency ledger (REQ-B5-075..079, 113), case_event_types semantic
 classification registry (REQ-B5-035..038, 115), and CaseEvent
 correction/supersession support (REQ-B5-069..074).
 
+`result_object_id` (REQ-B5-113 fix, R2): the idempotency ledger only
+stores decision_id; without recording the actual object_id an
+operation returns (e.g. case_participant_id for PARTICIPANT_ADD,
+event_id for EVENT_CORRECTION), replay would default to case_id for
+every operation family and silently fail to reconstruct the original
+outcome identity.
+
 Revision ID: 026
 Revises: 025
 Create Date: 2026-09-07
@@ -34,6 +41,7 @@ def upgrade() -> None:
         sa.Column("authority_context", postgresql.JSONB(), nullable=True),
         sa.Column("prior_value", postgresql.JSONB(), nullable=True),
         sa.Column("new_value", postgresql.JSONB(), nullable=True),
+        sa.Column("result_object_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("result", sa.Text(), nullable=False),
         sa.Column("rejection_category", sa.Text(), nullable=True),
         sa.Column("decided_at", sa.DateTime(timezone=True), nullable=False),

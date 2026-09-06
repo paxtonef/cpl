@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
@@ -79,7 +79,18 @@ def correct_case_event(
 ) -> CaseResult:
     """REQ-B5-071/072: correction by supersession, never destructive
     rewrite. The original CaseEvent row is preserved verbatim and
-    marked SUPERSEDED; a new CURRENT event is created."""
+    marked SUPERSEDED; a new CURRENT event is created.
+
+    R1: decision established BEFORE effect — the successor's PK is
+    pre-generated so the decision can reference it before either the
+    successor row or the prior-row supersession is applied.
+
+    R3: a correction attempt against an event that is already
+    SUPERSEDED is classified as CONFLICT, not SEMANTIC_REJECTION — two
+    authoritative correction instructions targeting the same governed
+    event are mutually incompatible (REQ-B5-082's own example), which
+    is a materially different situation from a request that is simply
+    invalid on its face."""
     authority.require(CaseAuthority.CORRECT_CASE)
 
     from app.cpl.models.canonical_case_decision import CanonicalCaseDecision
@@ -87,17 +98,41 @@ def correct_case_event(
     existing_request = session.get(CaseMutationRequest, idempotency_key)
     if existing_request is not None:
         decision = session.get(CanonicalCaseDecision, existing_request.decision_id)
-        return CaseResult(outcome=CaseOutcome.SUCCESS, object_id=decision.case_id,
+        outcome = CaseOutcome.SUCCESS if decision.result == "EXECUTED" else (decision.rejection_category or CaseOutcome.NO_CHANGE)
+        return CaseResult(outcome=outcome, object_id=decision.result_object_id or decision.case_id,
                            payload={"decision_id": decision.decision_id, "replay": True})
 
     prior = session.get(CaseEvent, event_id_to_correct)
     if prior is None:
         return CaseResult(outcome=CaseOutcome.NOT_FOUND)
     if prior.event_status != "CURRENT":
-        return CaseResult(outcome=CaseOutcome.SEMANTIC_REJECTION, detail="only a CURRENT event may be corrected")
+        # R3: already-superseded target -> CONFLICT (two authoritative
+        # correction instructions cannot both be honored), not a bare
+        # SEMANTIC_REJECTION.
+        from app.cpl.cases.lifecycle import _record_decision, _record_idempotency
+        conflict_decision = _record_decision(
+            session, case_id=prior.case_id, decision_type="EVENT_CORRECTION", authority=authority,
+            prior_value={"event_id": str(prior.event_id), "event_status": prior.event_status},
+            new_value={"attempted_payload": corrected_payload, "reason": reason},
+            result="REJECTED", rejection_category=CaseOutcome.CONFLICT, result_object_id=prior.event_id,
+        )
+        _record_idempotency(session, idempotency_key, conflict_decision.decision_id)
+        return CaseResult(outcome=CaseOutcome.CONFLICT, object_id=prior.event_id,
+                           detail="event already superseded by a prior correction",
+                           payload={"decision_id": conflict_decision.decision_id})
+
+    from app.cpl.cases.lifecycle import _record_decision, _record_idempotency
+    successor_id = uuid4()
+    # R1: decision established BEFORE effect.
+    decision = _record_decision(
+        session, case_id=prior.case_id, decision_type="EVENT_CORRECTION", authority=authority,
+        prior_value={"event_id": str(prior.event_id), "payload": prior.payload, "reason": reason},
+        new_value={"event_id": str(successor_id), "payload": corrected_payload},
+        result="EXECUTED", result_object_id=successor_id,
+    )
 
     successor = CaseEvent(
-        case_id=prior.case_id, event_type=prior.event_type, actor_type=prior.actor_type,
+        event_id=successor_id, case_id=prior.case_id, event_type=prior.event_type, actor_type=prior.actor_type,
         actor_reference_id=prior.actor_reference_id, execution_id=prior.execution_id,
         occurred_at=prior.occurred_at, payload=corrected_payload, event_status="CURRENT",
     )
@@ -107,13 +142,6 @@ def correct_case_event(
     prior.superseded_by_id = successor.event_id
     session.flush()
 
-    from app.cpl.cases.lifecycle import _record_decision, _record_idempotency
-    decision = _record_decision(
-        session, case_id=prior.case_id, decision_type="EVENT_CORRECTION", authority=authority,
-        prior_value={"event_id": str(prior.event_id), "payload": prior.payload, "reason": reason},
-        new_value={"event_id": str(successor.event_id), "payload": corrected_payload},
-        result="EXECUTED",
-    )
     _record_idempotency(session, idempotency_key, decision.decision_id)
     return CaseResult(outcome=CaseOutcome.SUCCESS, object_id=successor.event_id,
                        payload={"decision_id": decision.decision_id, "supersedes_event_id": prior.event_id})

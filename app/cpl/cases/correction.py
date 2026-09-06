@@ -4,6 +4,10 @@ Correction preserves prior state via the CanonicalCaseDecision
 ledger's prior_value/new_value JSONB rather than requiring new
 per-field supersession columns on Case itself (GAP-03: schema kept
 minimal, HOW left open).
+
+Decision/effect ordering (R1 repair): the decision is established
+BEFORE the Case row is mutated, not merely wrapped in the same
+rollback-safe transaction.
 """
 from __future__ import annotations
 
@@ -31,7 +35,7 @@ def correct_case_metadata(
     existing_request = session.get(CaseMutationRequest, idempotency_key)
     if existing_request is not None:
         decision = session.get(CanonicalCaseDecision, existing_request.decision_id)
-        return CaseResult(outcome=CaseOutcome.SUCCESS, object_id=decision.case_id,
+        return CaseResult(outcome=CaseOutcome.SUCCESS, object_id=decision.result_object_id or decision.case_id,
                            payload={"decision_id": decision.decision_id, "replay": True})
 
     case = session.get(Case, case_id)
@@ -39,18 +43,25 @@ def correct_case_metadata(
         return CaseResult(outcome=CaseOutcome.NOT_FOUND)
 
     prior_value = {"title": case.title, "case_type": case.case_type, "reason": reason}
+    intended_new_value = {
+        "title": new_title if new_title is not None else case.title,
+        "case_type": new_case_type if new_case_type is not None else case.case_type,
+    }
+
+    from app.cpl.cases.lifecycle import _record_decision, _record_idempotency
+    # R1: decision established BEFORE effect.
+    decision = _record_decision(
+        session, case_id=case_id, decision_type="METADATA_CORRECTION", authority=authority,
+        prior_value=prior_value, new_value=intended_new_value, result="EXECUTED",
+        result_object_id=case_id,
+    )
+
     if new_title is not None:
         case.title = new_title
     if new_case_type is not None:
         case.case_type = new_case_type
     session.flush()
 
-    from app.cpl.cases.lifecycle import _record_decision, _record_idempotency
-    decision = _record_decision(
-        session, case_id=case_id, decision_type="METADATA_CORRECTION", authority=authority,
-        prior_value=prior_value,
-        new_value={"title": case.title, "case_type": case.case_type}, result="EXECUTED",
-    )
     _record_idempotency(session, idempotency_key, decision.decision_id)
     return CaseResult(outcome=CaseOutcome.SUCCESS, object_id=case_id,
                        payload={"decision_id": decision.decision_id})

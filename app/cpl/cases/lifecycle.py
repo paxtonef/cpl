@@ -23,6 +23,7 @@ from app.cpl.models.case import Case
 from app.cpl.models.contact import Contact
 from app.cpl.models.asset import Asset
 from app.cpl.models.canonical_case_decision import CanonicalCaseDecision
+from app.cpl.models.canonical_asset_identity_decision import CanonicalAssetIdentityDecision
 from app.cpl.models.case_mutation_request import CaseMutationRequest
 
 VALID_CASE_STATUSES = frozenset({
@@ -39,7 +40,10 @@ def _idempotent_replay(session: Session, idempotency_key: str) -> Optional[CaseR
     outcome = CaseOutcome.SUCCESS if decision.result == "EXECUTED" else (
         decision.rejection_category or CaseOutcome.NO_CHANGE
     )
-    return CaseResult(outcome=outcome, object_id=decision.case_id,
+    # R2 fix: object_id must reconstruct the ORIGINAL operation's return
+    # identity (case_participant_id, event_id, ...), never default to
+    # case_id for every operation family.
+    return CaseResult(outcome=outcome, object_id=decision.result_object_id or decision.case_id,
                        payload={"decision_id": decision.decision_id, "replay": True})
 
 
@@ -63,6 +67,27 @@ def create_case(
     if asset is None or asset.asset_status == "MERGED":
         return CaseResult(outcome=CaseOutcome.NOT_FOUND, detail="asset_id is not a canonically valid Asset")
 
+    # REQ-B5-018 requires the Asset be "canonically valid ... (i.e.,
+    # resolvable per B4 governance)". If B4 currently has an active,
+    # unresolved HOLD decision on this Asset's identity (merge admitted
+    # but not yet executed/rejected), the Asset's canonical identity is
+    # not yet resolvable — this is UNRESOLVED, not a fabricated new
+    # semantic, but a direct reading of REQ-B5-018's own text combined
+    # with the already-frozen B4 HOLD outcome (B4_REQUIREMENT_MATRIX
+    # REQ-B4-050).
+    pending_hold = (
+        session.query(CanonicalAssetIdentityDecision)
+        .filter(
+            (CanonicalAssetIdentityDecision.source_asset_id == asset_id)
+            | (CanonicalAssetIdentityDecision.target_asset_id == asset_id),
+            CanonicalAssetIdentityDecision.result == "HOLD",
+        )
+        .first()
+    )
+    if pending_hold is not None:
+        return CaseResult(outcome=CaseOutcome.UNRESOLVED,
+                           detail="referenced Asset's canonical identity is under an unresolved B4 HOLD decision")
+
     case = Case(primary_contact_id=primary_contact_id, asset_id=asset_id, domain=domain,
                 case_type=case_type, case_status="OPEN", title=title)
     session.add(case)
@@ -71,6 +96,7 @@ def create_case(
     decision = _record_decision(
         session, case_id=case.case_id, decision_type="CREATE", authority=authority,
         prior_value=None, new_value={"case_status": "OPEN"}, result="EXECUTED",
+        result_object_id=case.case_id,
     )
     _record_idempotency(session, idempotency_key, decision.decision_id)
     return CaseResult(outcome=CaseOutcome.SUCCESS, object_id=case.case_id,
@@ -109,6 +135,7 @@ def transition_case_status(
     decision = _record_decision(
         session, case_id=case_id, decision_type="STATUS_TRANSITION", authority=authority,
         prior_value={"case_status": prior_status}, new_value={"case_status": new_status}, result="EXECUTED",
+        result_object_id=case_id,
     )
     case.case_status = new_status
     case.updated_at = datetime.now(timezone.utc)
@@ -143,7 +170,7 @@ def attempt_asset_rebind(
     decision = _record_decision(
         session, case_id=case_id, decision_type="ASSET_REBIND_ATTEMPT", authority=authority,
         prior_value={"asset_id": str(case.asset_id)}, new_value={"attempted_asset_id": str(new_asset_id)},
-        result="REJECTED", rejection_category=CaseOutcome.SEMANTIC_REJECTION,
+        result="REJECTED", rejection_category=CaseOutcome.SEMANTIC_REJECTION, result_object_id=case_id,
     )
     _record_idempotency(session, idempotency_key, decision.decision_id)
     return CaseResult(outcome=CaseOutcome.SEMANTIC_REJECTION, object_id=case_id,
@@ -154,11 +181,13 @@ def attempt_asset_rebind(
 def _record_decision(session: Session, *, case_id: UUID, decision_type: str, authority: AuthorityContext,
                       prior_value: Optional[dict], new_value: Optional[dict], result: str,
                       rejection_category: Optional[str] = None,
+                      result_object_id: Optional[UUID] = None,
                       supersedes: Optional[UUID] = None) -> CanonicalCaseDecision:
     decision = CanonicalCaseDecision(
         case_id=case_id, decision_type=decision_type, authority_context=authority.as_dict(),
         prior_value=prior_value, new_value=new_value, result=result,
-        rejection_category=rejection_category, supersedes_decision_id=supersedes,
+        rejection_category=rejection_category, result_object_id=result_object_id,
+        supersedes_decision_id=supersedes,
     )
     session.add(decision)
     session.flush()
