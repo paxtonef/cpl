@@ -21,6 +21,9 @@ from app.cpl.models.canonical_relationship_decision import CanonicalRelationship
 from app.cpl.models.relationship_mutation_request import RelationshipMutationRequest
 from app.cpl.models.domain_projection import DomainProjection
 from app.cpl.models.asset_creation_request import AssetCreationRequest
+from app.cpl.models.canonical_case_decision import CanonicalCaseDecision
+from app.cpl.models.case_mutation_request import CaseMutationRequest
+from app.cpl.models.case_event_type import CaseEventType
 
 __all__ = [
     "Contact", "ContactPoint", "Account", "Asset", "AssetIdentifier",
@@ -29,5 +32,5 @@ __all__ = [
     "IdentityOperation", "MergeProposal", "ContactPointVerification", "ContactCreationRequest",
     "CanonicalAssetIdentityDecision", "AssetMergeRequest",
     "CanonicalRelationshipDecision", "RelationshipMutationRequest", "DomainProjection",
-    "AssetCreationRequest",
+    "AssetCreationRequest", "CanonicalCaseDecision", "CaseMutationRequest", "CaseEventType",
 ]
