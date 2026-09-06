@@ -42,7 +42,21 @@ Evidence classes, matching the B4 candidate precedent:
 ## G — Authority / decision (REQ-B5-046–051, 110–112)
 
 **Evidence class:** DIRECT
-Full pipeline in `transition_case_status`, `add_participant`, `remove_participant`, `correct_case_metadata`, `correct_case_event` — all now decision-before-effect (R1 repair). Failure-injection proof in `TestR1DecisionBeforeEffect` (2 tests) plus the original `test_n_g_technical_failure_not_governed_rejection`. Authority mechanism non-prescription (051) — `app/cpl/cases/authority.py` reuses `AuthorityContext` as a HOW choice, not a mandated mechanism.
+Full pipeline in `create_case`, `transition_case_status`, `add_participant`, `remove_participant`, `correct_case_metadata`, `correct_case_event` — all decision-before-effect (R1 + R7 repairs). Failure-injection proof in `TestR1DecisionBeforeEffect` (2 tests), `TestR7CreateCasePipelineOrdering` (6 tests, including direct flush-order instrumentation, not just atomicity), plus the original `test_n_g_technical_failure_not_governed_rejection`. Authority mechanism non-prescription (051) — `app/cpl/cases/authority.py` reuses `AuthorityContext` as a HOW choice, not a mandated mechanism.
+
+### R7 full material-mutation pipeline audit
+
+| Operation | REQUEST | AUTHORITY | DECISION | EFFECT | HISTORY | ORDERING |
+|---|---|---|---|---|---|---|
+| CREATE_CASE | ✓ | ✓ (`authority.require`) | ✓ (pre-generated `case_id`, deferred FK) | ✓ (Case insert) | ✓ (decision row + idempotency) | **PASS** |
+| STATUS_TRANSITION | ✓ | ✓ | ✓ | ✓ (`case.case_status =`) | ✓ | **PASS** |
+| ASSET_REBIND_ATTEMPT | ✓ | ✓ | ✓ (always REJECTED) | n/a (no state change ever occurs — rejection has no effect to order) | ✓ | **PASS** (trivially — no effect exists) |
+| PARTICIPANT_ADD | ✓ | ✓ | ✓ (pre-generated `case_participant_id`) | ✓ (participant insert) | ✓ | **PASS** |
+| PARTICIPANT_REMOVE | ✓ | ✓ | ✓ | ✓ (`participant.participant_status =`) | ✓ | **PASS** |
+| METADATA_CORRECTION | ✓ | ✓ | ✓ | ✓ (`case.title =`/`case.case_type =`) | ✓ | **PASS** |
+| EVENT_CORRECTION | ✓ | ✓ | ✓ (pre-generated `event_id`, or CONFLICT rejection) | ✓ (successor insert + prior supersession) | ✓ | **PASS** |
+
+All seven operations audited directly against source (line numbers checked, not inferred). No operation omitted.
 
 ## H — Execution pointer boundary (REQ-B5-052–060)
 
@@ -115,5 +129,5 @@ DIRECT evidence:           11 of 20 family blocks (majority of requirements)
 STRUCTURAL evidence:       A (partial), M, N, P, Q, R — architecture-level guarantees
 REGRESSION-SUITE evidence: S — property of the whole suite run
 
-Full suite at this commit: 184 / 184 passing (152 B1-B4 baseline + 32 new B5)
+Full suite at this commit: 190 / 190 passing (152 B1-B4 baseline + 38 new B5)
 ```

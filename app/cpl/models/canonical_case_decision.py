@@ -11,7 +11,12 @@ class CanonicalCaseDecision(Base):
     REQUEST -> AUTHORITY -> DECISION -> EFFECT -> HISTORY. `prior_value`/
     `new_value` generically capture correction provenance for Case
     metadata, participant records, and CaseEvent corrections without
-    requiring per-field supersession columns on those tables."""
+    requiring per-field supersession columns on those tables.
+
+    case_id's FK is DEFERRABLE INITIALLY DEFERRED (R7): CREATE records
+    its decision before the Case row exists; Postgres checks the
+    constraint at COMMIT time, by which point the Case row has also
+    been inserted in the same transaction."""
 
     __tablename__ = "canonical_case_decisions"
     __table_args__ = (
@@ -31,7 +36,7 @@ class CanonicalCaseDecision(Base):
     )
 
     decision_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    case_id = Column(UUID(as_uuid=True), ForeignKey("cpl.cases.case_id", ondelete="RESTRICT"), nullable=False)
+    case_id = Column(UUID(as_uuid=True), ForeignKey("cpl.cases.case_id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"), nullable=False)
     decision_type = Column(Text, nullable=False)
     authority_context = Column(JSONB, nullable=True)
     prior_value = Column(JSONB, nullable=True)

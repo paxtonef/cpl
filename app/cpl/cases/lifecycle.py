@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
@@ -88,16 +88,27 @@ def create_case(
         return CaseResult(outcome=CaseOutcome.UNRESOLVED,
                            detail="referenced Asset's canonical identity is under an unresolved B4 HOLD decision")
 
-    case = Case(primary_contact_id=primary_contact_id, asset_id=asset_id, domain=domain,
+    # R7: genuine decision-before-effect for CREATE. Case.case_id is
+    # pre-generated in Python so the decision can reference the real
+    # object identity before the Case row is inserted. The decision
+    # INSERT succeeds even though no matching `cases` row exists yet,
+    # because CanonicalCaseDecision.case_id's FK is DEFERRABLE INITIALLY
+    # DEFERRED — Postgres checks it at COMMIT time, by which point the
+    # Case row below has also been inserted in the same transaction.
+    # This is a HOW-level constraint-timing choice only; it does not
+    # weaken referential integrity at commit and does not touch any
+    # frozen semantic.
+    new_case_id = uuid4()
+    decision = _record_decision(
+        session, case_id=new_case_id, decision_type="CREATE", authority=authority,
+        prior_value=None, new_value={"case_status": "OPEN"}, result="EXECUTED",
+        result_object_id=new_case_id,
+    )
+
+    case = Case(case_id=new_case_id, primary_contact_id=primary_contact_id, asset_id=asset_id, domain=domain,
                 case_type=case_type, case_status="OPEN", title=title)
     session.add(case)
     session.flush()
-
-    decision = _record_decision(
-        session, case_id=case.case_id, decision_type="CREATE", authority=authority,
-        prior_value=None, new_value={"case_status": "OPEN"}, result="EXECUTED",
-        result_object_id=case.case_id,
-    )
     _record_idempotency(session, idempotency_key, decision.decision_id)
     return CaseResult(outcome=CaseOutcome.SUCCESS, object_id=case.case_id,
                        payload={"decision_id": decision.decision_id})

@@ -11,6 +11,16 @@ event_id for EVENT_CORRECTION), replay would default to case_id for
 every operation family and silently fail to reconstruct the original
 outcome identity.
 
+`canonical_case_decisions.case_id` FK is DEFERRABLE INITIALLY DEFERRED
+(R7 fix): CREATE is the one operation where the effect (the Case row)
+does not yet exist when the decision must be recorded. A deferred FK
+lets the decision INSERT succeed with a case_id that does not yet
+exist in `cases`, with Postgres checking the constraint at COMMIT
+time rather than immediately — by which point the Case row has also
+been inserted in the same transaction. This is a HOW-level constraint
+timing change only; it does not alter what the FK means, weaken
+referential integrity at commit time, or touch any frozen semantic.
+
 Revision ID: 026
 Revises: 025
 Create Date: 2026-09-07
@@ -34,7 +44,7 @@ def upgrade() -> None:
         sa.Column(
             "case_id",
             postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("cpl.cases.case_id", ondelete="RESTRICT"),
+            sa.ForeignKey("cpl.cases.case_id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"),
             nullable=False,
         ),
         sa.Column("decision_type", sa.Text(), nullable=False),
