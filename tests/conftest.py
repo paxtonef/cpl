@@ -33,6 +33,9 @@ from app.cpl.models.canonical_relationship_decision import CanonicalRelationship
 from app.cpl.models.relationship_mutation_request import RelationshipMutationRequest
 from app.cpl.models.domain_projection import DomainProjection
 from app.cpl.models.asset_creation_request import AssetCreationRequest
+from app.cpl.models.canonical_case_decision import CanonicalCaseDecision
+from app.cpl.models.case_mutation_request import CaseMutationRequest
+from app.cpl.models.case_event_type import CaseEventType
 from app.automotive.models.vehicle_detail import VehicleDetail
 
 from app.db.engine import check_db_connection
@@ -119,6 +122,27 @@ def full_b4_authority():
                 AssetAuthority.EXECUTE_ASSET_MERGE,
                 AssetAuthority.CORRECT_ASSET_IDENTITY,
                 AssetAuthority.MANAGE_RELATIONSHIP,
+            }
+        ),
+        actor_reference="test-suite",
+    )
+
+
+@pytest.fixture
+def full_b5_authority():
+    """AuthorityContext holding every B5 Case authority class."""
+    from app.cpl.cases.authority import CaseAuthority
+    from app.cpl.identity.authority import AuthorityContext
+
+    return AuthorityContext(
+        granted=frozenset(
+            {
+                CaseAuthority.READ_CASE,
+                CaseAuthority.CREATE_CASE,
+                CaseAuthority.TRANSITION_CASE_STATUS,
+                CaseAuthority.MANAGE_CASE_PARTICIPANT,
+                CaseAuthority.RECORD_CASE_EVENT,
+                CaseAuthority.CORRECT_CASE,
             }
         ),
         actor_reference="test-suite",

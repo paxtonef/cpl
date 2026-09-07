@@ -9,6 +9,7 @@ class CaseEvent(Base):
     __tablename__ = "case_events"
     __table_args__ = (
         CheckConstraint("actor_type IN ('CONTACT', 'SYSTEM', 'RUNNER', 'ADMIN', 'EXTERNAL_PARTY')", name="case_events_actor_type_chk"),
+        CheckConstraint("event_status IN ('CURRENT', 'SUPERSEDED')", name="case_events_status_chk"),
         {"schema": "cpl"},
     )
 
@@ -20,4 +21,6 @@ class CaseEvent(Base):
     execution_id = Column(UUID(as_uuid=True), ForeignKey("cpl.runner_executions.execution_id", ondelete="RESTRICT"), nullable=True)
     occurred_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     payload = Column(JSONB, nullable=True)
+    event_status = Column(Text, nullable=False, default="CURRENT")
+    superseded_by_id = Column(UUID(as_uuid=True), ForeignKey("cpl.case_events.event_id", ondelete="RESTRICT"), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
