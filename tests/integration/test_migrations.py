@@ -41,3 +41,24 @@ def test_schemas_exist(db_engine):
     schemas = inspector.get_schema_names()
     assert "cpl" in schemas
     assert "automotive" in schemas
+
+
+def test_b6_migration_module_imports():
+    """B6 forward migration (027) is importable and well-formed —
+    added alongside, not replacing, the existing 001-018 check above."""
+    mod = importlib.import_module("migrations.versions.027_create_b6_execution_artifact_governance")
+    assert hasattr(mod, "upgrade")
+    assert hasattr(mod, "downgrade")
+    assert mod.revision == "027"
+    assert mod.down_revision == "026"
+
+
+@pytest.mark.skipif(not check_db_connection(), reason="PostgreSQL not available")
+def test_b6_migration_head_is_027():
+    """Historical migrations 001-026 remain unchanged; 027 is the new
+    head — forward-only, per the Execution Mandate's migration rules."""
+    alembic_cfg = Config("alembic.ini")
+    command.upgrade(alembic_cfg, "head")
+    from alembic.script import ScriptDirectory
+    script = ScriptDirectory.from_config(alembic_cfg)
+    assert script.get_current_head() == "027"
