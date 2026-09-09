@@ -37,6 +37,9 @@ from app.cpl.models.canonical_case_decision import CanonicalCaseDecision
 from app.cpl.models.case_mutation_request import CaseMutationRequest
 from app.cpl.models.case_event_type import CaseEventType
 from app.automotive.models.vehicle_detail import VehicleDetail
+from app.cpl.models.runner_governance_decision import RunnerGovernanceDecision
+from app.cpl.models.runner_artifact_schema_definition import RunnerArtifactSchemaDefinition
+from app.cpl.models.runner_execution_correction import RunnerExecutionCorrection
 
 from app.db.engine import check_db_connection
 
@@ -143,6 +146,27 @@ def full_b5_authority():
                 CaseAuthority.MANAGE_CASE_PARTICIPANT,
                 CaseAuthority.RECORD_CASE_EVENT,
                 CaseAuthority.CORRECT_CASE,
+            }
+        ),
+        actor_reference="test-suite",
+    )
+
+
+@pytest.fixture
+def full_b6_authority():
+    """AuthorityContext holding every B6 Runner authority class."""
+    from app.cpl.runners.authority import RunnerAuthority
+    from app.cpl.identity.authority import AuthorityContext
+
+    return AuthorityContext(
+        granted=frozenset(
+            {
+                RunnerAuthority.READ_EXECUTION,
+                RunnerAuthority.ADMIT_EXECUTION,
+                RunnerAuthority.TRANSITION_EXECUTION_STATUS,
+                RunnerAuthority.REGISTER_ARTIFACT,
+                RunnerAuthority.SUPERSEDE_ARTIFACT,
+                RunnerAuthority.CORRECT_EXECUTION,
             }
         ),
         actor_reference="test-suite",
