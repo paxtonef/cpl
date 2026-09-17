@@ -54,11 +54,11 @@ def test_b6_migration_module_imports():
 
 
 @pytest.mark.skipif(not check_db_connection(), reason="PostgreSQL not available")
-def test_b6_migration_head_is_027():
-    """Historical migrations 001-026 remain unchanged; 027 is the new
-    head — forward-only, per the Execution Mandate's migration rules."""
+def test_migration_head_is_028():
+    """Historical migrations remain unchanged; 028 is the current
+    forward-only migration head."""
     alembic_cfg = Config("alembic.ini")
     command.upgrade(alembic_cfg, "head")
     from alembic.script import ScriptDirectory
     script = ScriptDirectory.from_config(alembic_cfg)
-    assert script.get_current_head() == "027"
+    assert script.get_current_head() == "028"

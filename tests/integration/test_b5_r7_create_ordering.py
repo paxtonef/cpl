@@ -99,6 +99,14 @@ class TestR7CreateCasePipelineOrdering:
         asset = _asset(db_session)
         db_session.commit()
 
+        # The test database may contain committed decisions from earlier
+        # sessions. R7 requires that THIS failed operation leaves no
+        # additional committed CREATE decision; it does not require the
+        # whole persistent table to be empty.
+        create_decisions_before = db_session.query(CanonicalCaseDecision).filter(
+            CanonicalCaseDecision.decision_type == "CREATE",
+        ).count()
+
         original_flush = OrmSession.flush
         call_count = {"n": 0}
 
@@ -124,11 +132,11 @@ class TestR7CreateCasePipelineOrdering:
         # decision nor the Case survives. Deferred-checking only delays
         # WHEN the FK is validated (until commit) — it does not create a
         # committed, orphaned decision.
-        decisions = db_session.query(CanonicalCaseDecision).filter(
+        create_decisions_after = db_session.query(CanonicalCaseDecision).filter(
             CanonicalCaseDecision.decision_type == "CREATE",
-        ).all()
+        ).count()
         cases = db_session.query(Case).filter(Case.primary_contact_id == contact.contact_id).all()
-        assert decisions == []
+        assert create_decisions_after == create_decisions_before
         assert cases == []
 
     def test_5_successful_operation_produces_exactly_one_case_and_one_decision(self, db_session, full_b5_authority):
