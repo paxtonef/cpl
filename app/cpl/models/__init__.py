@@ -24,6 +24,8 @@ from app.cpl.models.asset_creation_request import AssetCreationRequest
 from app.cpl.models.canonical_case_decision import CanonicalCaseDecision
 from app.cpl.models.case_mutation_request import CaseMutationRequest
 from app.cpl.models.case_event_type import CaseEventType
+from app.cpl.models.manufacturer_knowledge_document import ManufacturerKnowledgeDocument
+from app.cpl.models.manufacturer_knowledge_dashboard_entry import ManufacturerKnowledgeDashboardEntry
 
 __all__ = [
     "Contact", "ContactPoint", "Account", "Asset", "AssetIdentifier",
@@ -33,4 +35,5 @@ __all__ = [
     "CanonicalAssetIdentityDecision", "AssetMergeRequest",
     "CanonicalRelationshipDecision", "RelationshipMutationRequest", "DomainProjection",
     "AssetCreationRequest", "CanonicalCaseDecision", "CaseMutationRequest", "CaseEventType",
+    "ManufacturerKnowledgeDocument", "ManufacturerKnowledgeDashboardEntry",
 ]
