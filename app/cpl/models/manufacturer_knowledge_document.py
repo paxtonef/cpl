@@ -14,6 +14,10 @@ class ManufacturerKnowledgeDocument(Base):
     __table_args__ = (
         CheckConstraint("lifecycle_status IN ('ACTIVE', 'SUPERSEDED')", name="mfr_knowledge_documents_lifecycle_chk"),
         CheckConstraint(
+            "freshness_status IN ('VERIFIED_CURRENT', 'STALE', 'SOURCE_UPDATE_REQUIRED', 'SOURCE_UNAVAILABLE')",
+            name="mfr_knowledge_documents_freshness_chk",
+        ),
+        CheckConstraint(
             "source_authority IN ('manufacturer_official', 'unverified_placeholder')",
             name="mfr_knowledge_documents_source_authority_chk",
         ),
@@ -38,6 +42,7 @@ class ManufacturerKnowledgeDocument(Base):
     source_authority = Column(Text, nullable=False)
     source_locator = Column(Text, nullable=False)
     lifecycle_status = Column(Text, nullable=False, default="ACTIVE")
+    freshness_status = Column(Text, nullable=False, default="VERIFIED_CURRENT")
     verified_at = Column(DateTime(timezone=True), nullable=True)
     supersedes_document_row_id = Column(
         UUID(as_uuid=True), ForeignKey("cpl.manufacturer_knowledge_documents.document_row_id", ondelete="RESTRICT"),

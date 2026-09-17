@@ -11,6 +11,16 @@ would falsely make one diagnostic execution the owner of knowledge meant
 to be shared across many future cases -- forbidden by the investigation's
 own explicit finding and by this mandate's §3.
 
+AMENDED (PRE-INTEGRATION REPAIR, this migration never published/shared --
+confirmed not an ancestor of origin/main before amending): adds
+`freshness_status`, a separate governed axis from `lifecycle_status`.
+Applicability, lifecycle (ACTIVE/SUPERSEDED), and freshness (VERIFIED_
+CURRENT/STALE/SOURCE_UPDATE_REQUIRED/SOURCE_UNAVAILABLE) are three
+independent concepts -- a SUPERSEDED row is not thereby STALE, and an
+ACTIVE row is not thereby VERIFIED_CURRENT merely because it is ACTIVE.
+`freshness_status` is never derived from `verified_at` by any code that
+writes it; it is always an explicit value.
+
 `manufacturer_knowledge_documents`: one row per manufacturer document
 generation. `lifecycle_status` distinguishes currently-usable ('ACTIVE')
 from historically-retained ('SUPERSEDED') knowledge -- append-only in
@@ -66,6 +76,7 @@ def upgrade() -> None:
         sa.Column("source_authority", sa.Text(), nullable=False),
         sa.Column("source_locator", sa.Text(), nullable=False),
         sa.Column("lifecycle_status", sa.Text(), nullable=False, server_default="ACTIVE"),
+        sa.Column("freshness_status", sa.Text(), nullable=False, server_default="VERIFIED_CURRENT"),
         sa.Column("verified_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "supersedes_document_row_id", postgresql.UUID(as_uuid=True),
@@ -75,6 +86,10 @@ def upgrade() -> None:
         sa.Column("content_hash", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.CheckConstraint("lifecycle_status IN ('ACTIVE', 'SUPERSEDED')", name="mfr_knowledge_documents_lifecycle_chk"),
+        sa.CheckConstraint(
+            "freshness_status IN ('VERIFIED_CURRENT', 'STALE', 'SOURCE_UPDATE_REQUIRED', 'SOURCE_UNAVAILABLE')",
+            name="mfr_knowledge_documents_freshness_chk",
+        ),
         sa.CheckConstraint(
             "source_authority IN ('manufacturer_official', 'unverified_placeholder')",
             name="mfr_knowledge_documents_source_authority_chk",
