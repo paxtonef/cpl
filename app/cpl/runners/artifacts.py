@@ -17,6 +17,10 @@ ambiguity — REQ-B6-054), is required whenever content is stored inline
 (REQ-B6-053), and a mismatch is flagged as a distinct integrity failure
 never conflated with structural REJECTED (REQ-B6-055) and never treated
 as evidence of semantic validity or domain truth (REQ-B6-056).
+
+The one other path that changes a registered payload is the governed
+expurgation of vehicle identifiers from vir_resolution artifacts
+(REQ-B6-091, app.cpl.runners.redaction).
 """
 from __future__ import annotations
 

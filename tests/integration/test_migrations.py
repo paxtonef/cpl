@@ -54,14 +54,14 @@ def test_b6_migration_module_imports():
 
 
 @pytest.mark.skipif(not check_db_connection(), reason="PostgreSQL not available")
-def test_migration_head_is_029():
-    """Historical migrations remain unchanged; 029 is the current
-    forward-only migration head."""
+def test_migration_head_is_030():
+    """Historical migrations remain unchanged; 030 (REQ-B6-091) is the
+    current forward-only migration head."""
     alembic_cfg = Config("alembic.ini")
     command.upgrade(alembic_cfg, "head")
     from alembic.script import ScriptDirectory
     script = ScriptDirectory.from_config(alembic_cfg)
-    assert script.get_current_head() == "029"
+    assert script.get_current_head() == "030"
 
 
 @pytest.mark.skipif(not check_db_connection(), reason="PostgreSQL not available")
@@ -85,3 +85,21 @@ def test_029_owner_attested_unverified_freshness_state():
             "AND column_name='freshness_status'"
         )).scalar()
         assert "OWNER_ATTESTED_UNVERIFIED" in default
+
+
+@pytest.mark.skipif(not check_db_connection(), reason="PostgreSQL not available")
+def test_030_identifier_redaction_schema_round_trip(db_engine):
+    """030 adds only schema (REQ-B6-091): the redaction mark, the trace
+    table and the widened decision type; down and up again cleanly while no
+    artifact has been expurgated."""
+    from sqlalchemy import inspect
+    alembic_cfg = Config("alembic.ini")
+    command.upgrade(alembic_cfg, "head")
+    inspector = inspect(db_engine)
+    assert "redaction_status" in {c["name"] for c in inspector.get_columns("runner_artifacts", schema="cpl")}
+    assert "runner_artifact_redactions" in inspector.get_table_names(schema="cpl")
+    command.downgrade(alembic_cfg, "029")
+    inspector = inspect(db_engine)
+    assert "runner_artifact_redactions" not in inspector.get_table_names(schema="cpl")
+    command.upgrade(alembic_cfg, "head")
+    assert "runner_artifact_redactions" in inspect(db_engine).get_table_names(schema="cpl")

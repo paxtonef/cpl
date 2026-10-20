@@ -26,7 +26,7 @@ class RunnerGovernanceDecision(Base):
     __table_args__ = (
         CheckConstraint(
             "decision_type IN ('EXECUTION_ADMISSION', 'EXECUTION_STATUS_TRANSITION', "
-            "'ARTIFACT_REGISTRATION', 'ARTIFACT_SUPERSESSION')",
+            "'ARTIFACT_REGISTRATION', 'ARTIFACT_SUPERSESSION', 'ARTIFACT_REDACTION')",
             name="runner_governance_decisions_type_chk",
         ),
         CheckConstraint(

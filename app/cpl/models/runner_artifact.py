@@ -32,6 +32,7 @@ class RunnerArtifact(Base):
             "presentation_role IS NULL OR presentation_role IN ('INTERNAL', 'PRODUCT_DISPLAYABLE')",
             name="runner_artifacts_presentation_role_chk",
         ),
+        CheckConstraint("redaction_status IS NULL OR redaction_status = 'REDACTED'", name="runner_artifacts_redaction_status_chk"),
         {"schema": "cpl"},
     )
 
@@ -55,3 +56,10 @@ class RunnerArtifact(Base):
     semantic_function = Column(Text, nullable=True)
     lifecycle_role = Column(Text, nullable=True)
     presentation_role = Column(Text, nullable=True)
+
+    # REQ-B6-091 (migration 030): NULL for an artifact whose payload is the
+    # registered content; 'REDACTED' once the governed expurgation
+    # (app.cpl.runners.redaction) removed the vehicle identifiers from it.
+    # Set only by that code path, together with its
+    # RunnerArtifactRedaction record.
+    redaction_status = Column(Text, nullable=True)
