@@ -54,14 +54,14 @@ def test_b6_migration_module_imports():
 
 
 @pytest.mark.skipif(not check_db_connection(), reason="PostgreSQL not available")
-def test_migration_head_is_030():
-    """Historical migrations remain unchanged; 030 (REQ-B6-091) is the
+def test_migration_head_is_031():
+    """Historical migrations remain unchanged; 031 (REQ-B5-116) is the
     current forward-only migration head."""
     alembic_cfg = Config("alembic.ini")
     command.upgrade(alembic_cfg, "head")
     from alembic.script import ScriptDirectory
     script = ScriptDirectory.from_config(alembic_cfg)
-    assert script.get_current_head() == "030"
+    assert script.get_current_head() == "031"
 
 
 @pytest.mark.skipif(not check_db_connection(), reason="PostgreSQL not available")
@@ -103,3 +103,19 @@ def test_030_identifier_redaction_schema_round_trip(db_engine):
     assert "runner_artifact_redactions" not in inspector.get_table_names(schema="cpl")
     command.upgrade(alembic_cfg, "head")
     assert "runner_artifact_redactions" in inspect(db_engine).get_table_names(schema="cpl")
+
+
+@pytest.mark.skipif(not check_db_connection(), reason="PostgreSQL not available")
+def test_031_case_deletion_trace_schema_round_trip(db_engine):
+    """031 adds only the trace table of REQ-B5-116 (no foreign key altered,
+    no trigger); down and up again cleanly while no Case has been deleted."""
+    from sqlalchemy import inspect, text
+    alembic_cfg = Config("alembic.ini")
+    command.upgrade(alembic_cfg, "head")
+    assert "case_deletions" in inspect(db_engine).get_table_names(schema="cpl")
+    with db_engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal")).scalar() == 0
+    command.downgrade(alembic_cfg, "030")
+    assert "case_deletions" not in inspect(db_engine).get_table_names(schema="cpl")
+    command.upgrade(alembic_cfg, "head")
+    assert "case_deletions" in inspect(db_engine).get_table_names(schema="cpl")
